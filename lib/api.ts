@@ -1,0 +1,30 @@
+import axios from "axios";
+import { getSession } from "next-auth/react";
+export type ApiResult<T> = { success: boolean; message: string; data: T };
+export type Entity = { _id: string; name?: string; title?: string; description?: string; category?: string; tag?: string; location?: string; date?: string; startDate?: string; endDate?: string; publishDate?: string; createdAt?: string; participants?: string[]; image?: { url?: string }; file?: { url?: string }; status?: string; action?: string; points?: number; type?: string; pointsRequired?: number; availabilityToggle?: string; priceMonthly?: number; priceYearly?: number; isActive?: boolean };
+export type Resource = "content" | "events" | "tenders" | "surveys" | "point-rules" | "gamification" | "admin/subscriptions";
+export const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTPUBLICBASEURL || "http://localhost:5005/api/v1" });
+api.interceptors.request.use(async config => {
+  const session = await getSession();
+  if (session?.accessToken) config.headers.Authorization = `Bearer ${session.accessToken}`;
+  return config;
+});
+const unwrap = <T,>(result: { data: ApiResult<T> }) => {
+  if (!result.data.success) throw new Error(result.data.message || "Request failed");
+  return result.data.data;
+};
+export const errorMessage = (error: unknown) => axios.isAxiosError(error) ? error.response?.data?.message || error.message : error instanceof Error ? error.message : "Something went wrong";
+export const listResources = async (resource: Resource): Promise<Entity[]> => unwrap(await api.get<ApiResult<Entity[]>>(`/${resource}`));
+export const createResource = async (resource: Resource, payload: Record<string, unknown> | FormData) => unwrap(await api.post<ApiResult<Entity>>(`/${resource}`, payload));
+export const updateResource = async (resource: Resource, id: string, payload: Record<string, unknown>) => unwrap(await api[resource === "admin/subscriptions" ? "put" : "patch"]<ApiResult<Entity>>(`/${resource}/${id}`, payload));
+export const deleteResource = async (resource: Resource, id: string) => resource === "admin/subscriptions" ? unwrap(await api.patch<ApiResult<Entity>>(`/${resource}/${id}`, { action: "delete" })) : unwrap(await api.delete<ApiResult<Entity>>(`/${resource}/${id}`));
+export const dashboard = async () => unwrap(await api.get<ApiResult<{ totalUsers: number; totalFeedback: number; openIssues: number; resolvedIssues: number; recentIssues: { _id:string; name?:string; comment?:string; proposal?:string; status?:string; createdAt?:string }[]; totalSubscriptions: number; totalSales: number; overviewData: { month?: string; week?: string; year?: number; count: number }[]; totalPayments: number; pendingPayments: number; failedPayments: number }>>("/admin/dashboard"));
+export const forgotPassword = async (email: string) => unwrap(await api.post<ApiResult<unknown>>("/auth/forget", { email }));
+export const verifyOtp = async (email: string, otp: string) => unwrap(await api.post<ApiResult<unknown>>("/auth/verify-otp", { email, otp }));
+export const resetPassword = async (email: string, otp: string, password: string) => unwrap(await api.post<ApiResult<unknown>>("/auth/reset-password", { email, otp, password }));
+export const changePassword = async (oldPassword: string, newPassword: string) => unwrap(await api.post<ApiResult<unknown>>("/auth/change-password", { oldPassword, newPassword }));
+export const logoutApi = async () => unwrap(await api.post<ApiResult<unknown>>("/auth/logout"));
+export const notifications = async () => unwrap(await api.get<ApiResult<{ docs: { _id:string; title?:string; message?:string; createdAt?:string }[]; totalDocs:number }>>("/notifications?page=1&limit=10"));
+export type SurveyFeedback = { _id:string; description?:string; createdAt?:string; user?: {name?:string;avatar?:{url?:string}}; survey?: {name?:string} };
+export const surveyFeedback = async () => unwrap(await api.get<ApiResult<SurveyFeedback[]>>("/admin/survey-feedback"));
+export const deleteSurveyFeedback = async (id:string) => unwrap(await api.delete<ApiResult<SurveyFeedback>>(`/admin/survey-feedback/${id}`));
